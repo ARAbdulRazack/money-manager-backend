@@ -1,0 +1,28 @@
+package com.money.manager.service;
+
+import com.money.manager.dto.CategorySummary;
+import com.money.manager.dto.DashboardStats;
+import com.money.manager.dto.TransactionRequest;
+import com.money.manager.dto.TransactionResponse;
+import com.money.manager.enums.Division;
+import com.money.manager.enums.TransactionType;
+
+import java.time.LocalDate;
+import java.util.List;
+
+public interface TransactionService {
+    TransactionResponse createTransaction(TransactionRequest request);
+
+    List<TransactionResponse> getAllTransactions();
+
+    TransactionResponse updateTransaction(String id, TransactionRequest request);
+
+    void deleteTransaction(String id);
+
+    List<TransactionResponse> filterTransactions(LocalDate startDate, LocalDate endDate, String category,
+            Division division);
+
+    DashboardStats getDashboardStats(String period); // weekly, monthly, yearly
+
+    List<CategorySummary> getCategorySummary(String period);
+}

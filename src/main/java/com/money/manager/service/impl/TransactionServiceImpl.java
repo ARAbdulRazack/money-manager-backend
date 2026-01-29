@@ -1,0 +1,245 @@
+package com.money.manager.service.impl;
+
+import com.money.manager.dto.CategorySummary;
+import com.money.manager.dto.DashboardStats;
+import com.money.manager.dto.TransactionRequest;
+import com.money.manager.dto.TransactionResponse;
+import com.money.manager.enums.Division;
+import com.money.manager.enums.TransactionType;
+import com.money.manager.exception.BusinessRuleException;
+import com.money.manager.exception.ResourceNotFoundException;
+import com.money.manager.model.Transaction;
+import com.money.manager.repository.TransactionRepository;
+import com.money.manager.service.TransactionService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class TransactionServiceImpl implements TransactionService {
+
+    private final TransactionRepository transactionRepository;
+    private final MongoTemplate mongoTemplate;
+
+    public TransactionServiceImpl(TransactionRepository transactionRepository, MongoTemplate mongoTemplate) {
+        this.transactionRepository = transactionRepository;
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    @Override
+    public TransactionResponse createTransaction(TransactionRequest request) {
+        Transaction transaction = new Transaction();
+        mapToEntity(request, transaction);
+        transaction.setCreatedAt(LocalDateTime.now());
+        transaction.setUpdatedAt(LocalDateTime.now());
+
+        Transaction saved = transactionRepository.save(transaction);
+        return mapToResponse(saved);
+    }
+
+    @Override
+    public List<TransactionResponse> getAllTransactions() {
+        return transactionRepository.findAll(Sort.by(Sort.Direction.DESC, "transactionDate"))
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public TransactionResponse updateTransaction(String id, TransactionRequest request) {
+        Transaction transaction = transactionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
+
+        // Check 12-hour rule
+        long hoursDiff = ChronoUnit.HOURS.between(transaction.getCreatedAt(), LocalDateTime.now());
+        if (hoursDiff > 12) {
+            throw new BusinessRuleException("Transaction cannot be edited after 12 hours");
+        }
+
+        mapToEntity(request, transaction);
+        transaction.setUpdatedAt(LocalDateTime.now());
+
+        Transaction saved = transactionRepository.save(transaction);
+        return mapToResponse(saved);
+    }
+
+    @Override
+    public void deleteTransaction(String id) {
+        // Assuming delete is also subject to 12 hour rule? The requirement only says
+        // "Income/Expense can be edited ONLY within 12 hours".
+        // Usually delete is also restricted, but I will stick to "edited". If user
+        // wants delete restricted, they'll say.
+        // But to be safe and consistent, I'll restrict delete too if it's considered a
+        // modification.
+        // "Income/Expense can be edited ONLY within 12 hours" - 'edited' usually
+        // implies UPDATE.
+        // However, I'll allow delete for now unless strictly implied.
+        if (!transactionRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Transaction not found");
+        }
+        transactionRepository.deleteById(id);
+    }
+
+    @Override
+    public List<TransactionResponse> filterTransactions(LocalDate startDate, LocalDate endDate, String category,
+            Division division) {
+        Query query = new Query();
+        List<Criteria> criteriaList = new ArrayList<>();
+
+        if (startDate != null && endDate != null) {
+            criteriaList.add(
+                    Criteria.where("transactionDate").gte(startDate.atStartOfDay()).lte(endDate.atTime(LocalTime.MAX)));
+        } else if (startDate != null) {
+            criteriaList.add(Criteria.where("transactionDate").gte(startDate.atStartOfDay()));
+        } else if (endDate != null) {
+            criteriaList.add(Criteria.where("transactionDate").lte(endDate.atTime(LocalTime.MAX)));
+        }
+
+        if (category != null && !category.isEmpty()) {
+            criteriaList.add(Criteria.where("category").is(category));
+        }
+
+        if (division != null) {
+            criteriaList.add(Criteria.where("division").is(division));
+        }
+
+        if (!criteriaList.isEmpty()) {
+            query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
+        }
+
+        query.with(Sort.by(Sort.Direction.DESC, "transactionDate"));
+
+        return mongoTemplate.find(query, Transaction.class)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public DashboardStats getDashboardStats(String period) {
+        LocalDateTime start, end;
+        LocalDateTime now = LocalDateTime.now();
+
+        if ("weekly".equalsIgnoreCase(period)) {
+            start = now.minusDays(7);
+            end = now;
+        } else if ("monthly".equalsIgnoreCase(period)) {
+            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
+            end = now;
+        } else if ("yearly".equalsIgnoreCase(period)) {
+            start = now.withDayOfYear(1).toLocalDate().atStartOfDay();
+            end = now;
+        } else {
+            // Default monthly
+            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
+            end = now;
+        }
+
+        // Aggregate Income
+        Double income = calculateTotal(start, end, TransactionType.INCOME);
+        // Aggregate Expense
+        Double expense = calculateTotal(start, end, TransactionType.EXPENSE);
+
+        return new DashboardStats(income, expense, income - expense);
+    }
+
+    private Double calculateTotal(LocalDateTime start, LocalDateTime end, TransactionType type) {
+        Aggregation aggregation = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("transactionDate").gte(start).lte(end).and("type").is(type)),
+                Aggregation.group().sum("amount").as("total"));
+
+        AggregationResults<DocumentWrapper> results = mongoTemplate.aggregate(aggregation, "transactions",
+                DocumentWrapper.class);
+        DocumentWrapper result = results.getUniqueMappedResult();
+        return result != null ? result.getTotal() : 0.0;
+    }
+
+    // Helper class for aggregation result
+    @org.springframework.data.mongodb.core.mapping.Document
+    static class DocumentWrapper {
+        private Double total;
+
+        public Double getTotal() {
+            return total;
+        }
+
+        public void setTotal(Double total) {
+            this.total = total;
+        }
+    }
+
+    @Override
+    public List<CategorySummary> getCategorySummary(String period) {
+        LocalDateTime start, end;
+        LocalDateTime now = LocalDateTime.now();
+
+        if ("weekly".equalsIgnoreCase(period)) {
+            start = now.minusDays(7);
+            end = now;
+        } else if ("monthly".equalsIgnoreCase(period)) {
+            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
+            end = now;
+        } else if ("yearly".equalsIgnoreCase(period)) {
+            start = now.withDayOfYear(1).toLocalDate().atStartOfDay();
+            end = now;
+        } else {
+            // Default monthly
+            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
+            end = now;
+        }
+
+        Aggregation agg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("transactionDate").gte(start).lte(end)),
+                Aggregation.group("category", "type").sum("amount").as("totalAmount"));
+
+        AggregationResults<org.bson.Document> results = mongoTemplate.aggregate(agg, "transactions",
+                org.bson.Document.class);
+
+        return results.getMappedResults().stream().map(doc -> {
+            org.bson.Document id = (org.bson.Document) doc.get("_id");
+            String cat = id.getString("category");
+            String typeStr = id.getString("type");
+            Double total = doc.getDouble("totalAmount");
+            return new CategorySummary(cat, TransactionType.valueOf(typeStr), total);
+        }).collect(Collectors.toList());
+    }
+
+    private void mapToEntity(TransactionRequest request, Transaction transaction) {
+        transaction.setType(request.getType());
+        transaction.setAmount(request.getAmount());
+        transaction.setCategory(request.getCategory());
+        transaction.setDivision(request.getDivision());
+        transaction.setDescription(request.getDescription());
+        transaction.setTransactionDate(request.getTransactionDate());
+        transaction.setSourceAccount(request.getSourceAccount());
+        transaction.setTargetAccount(request.getTargetAccount());
+    }
+
+    private TransactionResponse mapToResponse(Transaction transaction) {
+        TransactionResponse response = new TransactionResponse();
+        response.setId(transaction.getId());
+        response.setType(transaction.getType());
+        response.setAmount(transaction.getAmount());
+        response.setCategory(transaction.getCategory());
+        response.setDivision(transaction.getDivision());
+        response.setDescription(transaction.getDescription());
+        response.setTransactionDate(transaction.getTransactionDate());
+        response.setCreatedAt(transaction.getCreatedAt());
+        response.setSourceAccount(transaction.getSourceAccount());
+        response.setTargetAccount(transaction.getTargetAccount());
+        return response;
+    }
+}
