@@ -144,27 +144,21 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public DashboardStats getDashboardStats(String period) {
-        LocalDateTime start, end;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = LocalDate.now();
+        LocalDateTime start;
+        LocalDateTime end = today.atTime(LocalTime.MAX); // end of today (inclusive)
 
         if ("weekly".equalsIgnoreCase(period)) {
-            start = now.minusDays(7);
-            end = now;
+            start = today.minusDays(7).atStartOfDay();
         } else if ("monthly".equalsIgnoreCase(period)) {
-            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
-            end = now;
+            start = today.withDayOfMonth(1).atStartOfDay();
         } else if ("yearly".equalsIgnoreCase(period)) {
-            start = now.withDayOfYear(1).toLocalDate().atStartOfDay();
-            end = now;
+            start = today.withDayOfYear(1).atStartOfDay();
         } else {
-            // Default monthly
-            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
-            end = now;
+            start = today.withDayOfMonth(1).atStartOfDay();
         }
 
-        // Aggregate Income
         Double income = calculateTotal(start, end, TransactionType.INCOME);
-        // Aggregate Expense
         Double expense = calculateTotal(start, end, TransactionType.EXPENSE);
 
         return new DashboardStats(income, expense, income - expense);
@@ -197,22 +191,18 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public List<CategorySummary> getCategorySummary(String period) {
-        LocalDateTime start, end;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = LocalDate.now();
+        LocalDateTime start;
+        LocalDateTime end = today.atTime(LocalTime.MAX);
 
         if ("weekly".equalsIgnoreCase(period)) {
-            start = now.minusDays(7);
-            end = now;
+            start = today.minusDays(7).atStartOfDay();
         } else if ("monthly".equalsIgnoreCase(period)) {
-            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
-            end = now;
+            start = today.withDayOfMonth(1).atStartOfDay();
         } else if ("yearly".equalsIgnoreCase(period)) {
-            start = now.withDayOfYear(1).toLocalDate().atStartOfDay();
-            end = now;
+            start = today.withDayOfYear(1).atStartOfDay();
         } else {
-            // Default monthly
-            start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
-            end = now;
+            start = today.withDayOfMonth(1).atStartOfDay();
         }
 
         Aggregation agg = Aggregation.newAggregation(
