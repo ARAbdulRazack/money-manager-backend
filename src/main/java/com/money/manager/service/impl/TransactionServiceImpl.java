@@ -101,15 +101,6 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public void deleteTransaction(String id) {
-        // Assuming delete is also subject to 12 hour rule? The requirement only says
-        // "Income/Expense can be edited ONLY within 12 hours".
-        // Usually delete is also restricted, but I will stick to "edited". If user
-        // wants delete restricted, they'll say.
-        // But to be safe and consistent, I'll restrict delete too if it's considered a
-        // modification.
-        // "Income/Expense can be edited ONLY within 12 hours" - 'edited' usually
-        // implies UPDATE.
-        // However, I'll allow delete for now unless strictly implied.
         if (!transactionRepository.existsById(id)) {
             throw new ResourceNotFoundException("Transaction not found");
         }

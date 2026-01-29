@@ -1,9 +1,5 @@
 package com.money.manager.dto;
 
-import lombok.Data; // Keeping import to avoid error if I miss removing annotation, but I will remove annotation
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-
 public class DashboardStats {
     private Double totalIncome;
     private Double totalExpense;

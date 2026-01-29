@@ -2,7 +2,6 @@ package com.money.manager.dto;
 
 import com.money.manager.enums.Division;
 import com.money.manager.enums.TransactionType;
-import lombok.Data; // Removing usage
 
 import java.time.LocalDateTime;
 
