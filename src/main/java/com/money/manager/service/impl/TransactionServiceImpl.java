@@ -2,6 +2,7 @@ package com.money.manager.service.impl;
 
 import com.money.manager.dto.CategorySummary;
 import com.money.manager.dto.DashboardStats;
+import com.money.manager.dto.PagedResponse;
 import com.money.manager.dto.TransactionRequest;
 import com.money.manager.dto.TransactionResponse;
 import com.money.manager.enums.Division;
@@ -11,7 +12,9 @@ import com.money.manager.exception.ResourceNotFoundException;
 import com.money.manager.model.Transaction;
 import com.money.manager.repository.TransactionRepository;
 import com.money.manager.service.TransactionService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
@@ -51,11 +54,31 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public List<TransactionResponse> getAllTransactions() {
-        return transactionRepository.findAll(Sort.by(Sort.Direction.DESC, "transactionDate"))
+    public PagedResponse<TransactionResponse> getAllTransactions(int page, int size) {
+        if (page < 0) {
+            page = 0;
+        }
+        if (size <= 0) {
+            size = 10;
+        }
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "transactionDate"));
+        Page<Transaction> transactionPage = transactionRepository.findAll(pageable);
+
+        List<TransactionResponse> content = transactionPage.getContent()
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+
+        PagedResponse<TransactionResponse> response = new PagedResponse<>();
+        response.setContent(content);
+        response.setPage(transactionPage.getNumber());
+        response.setSize(transactionPage.getSize());
+        response.setTotalElements(transactionPage.getTotalElements());
+        response.setTotalPages(transactionPage.getTotalPages());
+        response.setLast(transactionPage.isLast());
+
+        return response;
     }
 
     @Override

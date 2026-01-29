@@ -2,6 +2,7 @@ package com.money.manager.controller;
 
 import com.money.manager.dto.CategorySummary;
 import com.money.manager.dto.DashboardStats;
+import com.money.manager.dto.PagedResponse;
 import com.money.manager.dto.TransactionRequest;
 import com.money.manager.dto.TransactionResponse;
 import com.money.manager.enums.Division;
@@ -31,8 +32,10 @@ public class TransactionController {
     }
 
     @GetMapping("/transactions")
-    public ResponseEntity<List<TransactionResponse>> getAllTransactions() {
-        return ResponseEntity.ok(transactionService.getAllTransactions());
+    public ResponseEntity<PagedResponse<TransactionResponse>> getAllTransactions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(transactionService.getAllTransactions(page, size));
     }
 
     @PutMapping("/transactions/{id}")
