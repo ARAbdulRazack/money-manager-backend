@@ -12,7 +12,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -43,10 +43,11 @@ public class TransactionController {
         return ResponseEntity.ok(transactionService.updateTransaction(id, request));
     }
 
+    /** startDate/endDate must be UTC ISO-8601 (e.g. 2026-01-01T00:00:00Z). End is exclusive. */
     @GetMapping("/transactions/filter")
     public ResponseEntity<List<TransactionResponse>> filterTransactions(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) Division division) {
         return ResponseEntity.ok(transactionService.filterTransactions(startDate, endDate, category, division));

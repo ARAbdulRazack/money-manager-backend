@@ -7,8 +7,9 @@ import com.money.manager.dto.TransactionRequest;
 import com.money.manager.dto.TransactionResponse;
 import com.money.manager.enums.Division;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
+
 public interface TransactionService {
     TransactionResponse createTransaction(TransactionRequest request);
 
@@ -18,10 +19,11 @@ public interface TransactionService {
 
     void deleteTransaction(String id);
 
-    List<TransactionResponse> filterTransactions(LocalDate startDate, LocalDate endDate, String category,
+    /** start inclusive, end exclusive (UTC). */
+    List<TransactionResponse> filterTransactions(Instant startDate, Instant endDate, String category,
             Division division);
 
-    DashboardStats getDashboardStats(String period); // weekly, monthly, yearly
+    DashboardStats getDashboardStats(String period); // weekly, monthly, yearly (UTC ranges)
 
     List<CategorySummary> getCategorySummary(String period);
 }

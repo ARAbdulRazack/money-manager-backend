@@ -3,8 +3,12 @@ package com.money.manager.dto;
 import com.money.manager.enums.Division;
 import com.money.manager.enums.TransactionType;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
+/**
+ * All dates are serialized as ISO-8601 UTC strings (e.g. "2026-01-29T06:15:00Z").
+ * Frontend should display using user's local timezone.
+ */
 public class TransactionResponse {
     private String id;
     private TransactionType type;
@@ -12,8 +16,8 @@ public class TransactionResponse {
     private String category;
     private Division division;
     private String description;
-    private LocalDateTime transactionDate;
-    private LocalDateTime createdAt;
+    private Instant transactionDate;
+    private Instant createdAt;
     private String sourceAccount;
     private String targetAccount;
 
@@ -65,19 +69,19 @@ public class TransactionResponse {
         this.description = description;
     }
 
-    public LocalDateTime getTransactionDate() {
+    public Instant getTransactionDate() {
         return transactionDate;
     }
 
-    public void setTransactionDate(LocalDateTime transactionDate) {
+    public void setTransactionDate(Instant transactionDate) {
         this.transactionDate = transactionDate;
     }
 
-    public LocalDateTime getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
+    public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 

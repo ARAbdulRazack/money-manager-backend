@@ -23,9 +23,9 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,8 +46,9 @@ public class TransactionServiceImpl implements TransactionService {
     public TransactionResponse createTransaction(TransactionRequest request) {
         Transaction transaction = new Transaction();
         mapToEntity(request, transaction);
-        transaction.setCreatedAt(LocalDateTime.now());
-        transaction.setUpdatedAt(LocalDateTime.now());
+        // Store timestamps in UTC; never use server timezone
+        transaction.setCreatedAt(Instant.now());
+        transaction.setUpdatedAt(Instant.now());
 
         Transaction saved = transactionRepository.save(transaction);
         return mapToResponse(saved);
@@ -86,14 +87,14 @@ public class TransactionServiceImpl implements TransactionService {
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
 
-        // Check 12-hour rule
-        long hoursDiff = ChronoUnit.HOURS.between(transaction.getCreatedAt(), LocalDateTime.now());
+        // Check 12-hour rule (both in UTC)
+        long hoursDiff = ChronoUnit.HOURS.between(transaction.getCreatedAt(), Instant.now());
         if (hoursDiff > 12) {
             throw new BusinessRuleException("Transaction cannot be edited after 12 hours");
         }
 
         mapToEntity(request, transaction);
-        transaction.setUpdatedAt(LocalDateTime.now());
+        transaction.setUpdatedAt(Instant.now());
 
         Transaction saved = transactionRepository.save(transaction);
         return mapToResponse(saved);
@@ -108,18 +109,18 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public List<TransactionResponse> filterTransactions(LocalDate startDate, LocalDate endDate, String category,
+    public List<TransactionResponse> filterTransactions(Instant startDate, Instant endDate, String category,
             Division division) {
         Query query = new Query();
         List<Criteria> criteriaList = new ArrayList<>();
 
+        // UTC range: transactionDate >= start AND transactionDate < end (exclusive end)
         if (startDate != null && endDate != null) {
-            criteriaList.add(
-                    Criteria.where("transactionDate").gte(startDate.atStartOfDay()).lte(endDate.atTime(LocalTime.MAX)));
+            criteriaList.add(Criteria.where("transactionDate").gte(startDate).lt(endDate));
         } else if (startDate != null) {
-            criteriaList.add(Criteria.where("transactionDate").gte(startDate.atStartOfDay()));
+            criteriaList.add(Criteria.where("transactionDate").gte(startDate));
         } else if (endDate != null) {
-            criteriaList.add(Criteria.where("transactionDate").lte(endDate.atTime(LocalTime.MAX)));
+            criteriaList.add(Criteria.where("transactionDate").lt(endDate));
         }
 
         if (category != null && !category.isEmpty()) {
@@ -144,18 +145,23 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public DashboardStats getDashboardStats(String period) {
-        LocalDate today = LocalDate.now();
-        LocalDateTime start;
-        LocalDateTime end = today.atTime(LocalTime.MAX); // end of today (inclusive)
+        // All ranges in UTC; never use server timezone
+        LocalDate todayUtc = LocalDate.now(ZoneOffset.UTC);
+        Instant start;
+        Instant end;
 
         if ("weekly".equalsIgnoreCase(period)) {
-            start = today.minusDays(7).atStartOfDay();
+            start = todayUtc.minusDays(7).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         } else if ("monthly".equalsIgnoreCase(period)) {
-            start = today.withDayOfMonth(1).atStartOfDay();
+            start = todayUtc.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.withDayOfMonth(1).plusMonths(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         } else if ("yearly".equalsIgnoreCase(period)) {
-            start = today.withDayOfYear(1).atStartOfDay();
+            start = todayUtc.withDayOfYear(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.withDayOfYear(1).plusYears(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         } else {
-            start = today.withDayOfMonth(1).atStartOfDay();
+            start = todayUtc.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.withDayOfMonth(1).plusMonths(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         }
 
         Double income = calculateTotal(start, end, TransactionType.INCOME);
@@ -164,9 +170,10 @@ public class TransactionServiceImpl implements TransactionService {
         return new DashboardStats(income, expense, income - expense);
     }
 
-    private Double calculateTotal(LocalDateTime start, LocalDateTime end, TransactionType type) {
+    /** UTC range: start inclusive, end exclusive. No $month/$year. */
+    private Double calculateTotal(Instant start, Instant end, TransactionType type) {
         Aggregation aggregation = Aggregation.newAggregation(
-                Aggregation.match(Criteria.where("transactionDate").gte(start).lte(end).and("type").is(type)),
+                Aggregation.match(Criteria.where("transactionDate").gte(start).lt(end).and("type").is(type)),
                 Aggregation.group().sum("amount").as("total"));
 
         AggregationResults<DocumentWrapper> results = mongoTemplate.aggregate(aggregation, "transactions",
@@ -191,22 +198,27 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public List<CategorySummary> getCategorySummary(String period) {
-        LocalDate today = LocalDate.now();
-        LocalDateTime start;
-        LocalDateTime end = today.atTime(LocalTime.MAX);
+        // Same UTC ranges as getDashboardStats; no server timezone
+        LocalDate todayUtc = LocalDate.now(ZoneOffset.UTC);
+        Instant start;
+        Instant end;
 
         if ("weekly".equalsIgnoreCase(period)) {
-            start = today.minusDays(7).atStartOfDay();
+            start = todayUtc.minusDays(7).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         } else if ("monthly".equalsIgnoreCase(period)) {
-            start = today.withDayOfMonth(1).atStartOfDay();
+            start = todayUtc.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.withDayOfMonth(1).plusMonths(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         } else if ("yearly".equalsIgnoreCase(period)) {
-            start = today.withDayOfYear(1).atStartOfDay();
+            start = todayUtc.withDayOfYear(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.withDayOfYear(1).plusYears(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         } else {
-            start = today.withDayOfMonth(1).atStartOfDay();
+            start = todayUtc.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            end = todayUtc.withDayOfMonth(1).plusMonths(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         }
 
         Aggregation agg = Aggregation.newAggregation(
-                Aggregation.match(Criteria.where("transactionDate").gte(start).lte(end)),
+                Aggregation.match(Criteria.where("transactionDate").gte(start).lt(end)),
                 Aggregation.group("category", "type").sum("amount").as("totalAmount"));
 
         AggregationResults<org.bson.Document> results = mongoTemplate.aggregate(agg, "transactions",
