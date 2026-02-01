@@ -45,12 +45,14 @@ public class TransactionController {
 
     /** startDate/endDate must be UTC ISO-8601 (e.g. 2026-01-01T00:00:00Z). End is exclusive. */
     @GetMapping("/transactions/filter")
-    public ResponseEntity<List<TransactionResponse>> filterTransactions(
+    public ResponseEntity<PagedResponse<TransactionResponse>> filterTransactions(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) Division division) {
-        return ResponseEntity.ok(transactionService.filterTransactions(startDate, endDate, category, division));
+            @RequestParam(required = false) Division division,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(transactionService.filterTransactions(startDate, endDate, category, division, page, size));
     }
 
     @GetMapping("/dashboard/weekly")

@@ -19,9 +19,9 @@ public interface TransactionService {
 
     void deleteTransaction(String id);
 
-    /** start inclusive, end exclusive (UTC). */
-    List<TransactionResponse> filterTransactions(Instant startDate, Instant endDate, String category,
-            Division division);
+    /** start inclusive, end exclusive (UTC). Returns paginated response. */
+    PagedResponse<TransactionResponse> filterTransactions(Instant startDate, Instant endDate, String category,
+            Division division, int page, int size);
 
     DashboardStats getDashboardStats(String period); // weekly, monthly, yearly (UTC ranges)
 

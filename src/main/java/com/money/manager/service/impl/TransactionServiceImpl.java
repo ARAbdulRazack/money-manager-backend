@@ -109,8 +109,8 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    public List<TransactionResponse> filterTransactions(Instant startDate, Instant endDate, String category,
-            Division division) {
+    public PagedResponse<TransactionResponse> filterTransactions(Instant startDate, Instant endDate, String category,
+            Division division, int page, int size) {
         Query query = new Query();
         List<Criteria> criteriaList = new ArrayList<>();
 
@@ -135,12 +135,27 @@ public class TransactionServiceImpl implements TransactionService {
             query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
         }
 
-        query.with(Sort.by(Sort.Direction.DESC, "transactionDate"));
+        long totalElements = mongoTemplate.count(query, Transaction.class);
 
-        return mongoTemplate.find(query, Transaction.class)
+        if (page < 0) page = 0;
+        if (size <= 0) size = 10;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "transactionDate"));
+        query.with(pageable);
+
+        List<TransactionResponse> content = mongoTemplate.find(query, Transaction.class)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+
+        PagedResponse<TransactionResponse> response = new PagedResponse<>();
+        response.setContent(content);
+        response.setPage(page);
+        response.setSize(size);
+        response.setTotalElements(totalElements);
+        response.setTotalPages((int) Math.ceil((double) totalElements / size));
+        response.setLast(page + 1 >= response.getTotalPages());
+
+        return response;
     }
 
     @Override
